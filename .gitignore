@@ -14,5 +14,9 @@ ib_async.egg-info
 poetry.lock
 *.csv
 *.json
-/pysystemtrade-master
+/pysystemtrade-develop
 /ib_async-main
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
