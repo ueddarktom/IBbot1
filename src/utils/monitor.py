@@ -17,8 +17,8 @@ class GetFuncExecutionTime(object):
     def __init__(self):
         
         time_log = pd.DataFrame(columns=['class', 'funtion', 'start_time', 'end_time', 'execution_time', 'memory_usage'])
-        self.log=time_log
-        self.format='%m-%d-%Y %H:%M:%S'
+        self.log = time_log
+        self.format = '%m-%d-%Y %H:%M:%S'
 
     def __call__(self, func):
 

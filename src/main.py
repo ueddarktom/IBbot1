@@ -1,46 +1,65 @@
-import os, sys
-import argparse
+import asyncio
+import os
+from typing import Any, Dict, Optional
 
 import ibconnection.connector as ibc
 from utils.settings import Settings
 
 
-root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(root_folder)
+STATUS_INTERVAL_SECONDS = 10 * 60
 
-settings=Settings(root_folder)
+root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+settings = Settings(root_folder)
 
 
 class Executor(object):
-    def __init__(self, settings: Settings, experiment_name= None):
+    def __init__(self, settings: Settings, experiment_name: Optional[str] = None):
         self.settings = settings
-        self.experiment_name = experiment_name
+        self.experiment_name = experiment_name or "IB account monitor"
+        self.link = ibc.Botconnector(self.settings)
 
+    def _print_status(self, snapshot: Dict[str, Any]) -> None:
+        print(f"[{snapshot['timestamp']}] {self.experiment_name}")
+        print(f"Connected to IBKR: {snapshot['connected']}")
+        print(
+            "Total Unrealized Gain/Loss: "
+            f"{snapshot['total_unrealized_gain_loss']:.2f}"
+        )
 
-    def run(self):
-        print(f"Running experiment: {self.experiment_name} with settings: {self.settings.__dict__}")
-        link = ibc.Botconnector(self.settings)
-        position=link.ib.positions()
-        print(position)
+        if snapshot["positions"]:
+            print("Open Positions:")
+            for position in snapshot["positions"]:
+                print(
+                    "  "
+                    f"{position['symbol']} "
+                    f"({position['secType']} @ {position['exchange']}) | "
+                    f"qty={position['quantity']} | "
+                    f"avg_cost={position['average_cost']} {position['currency']}"
+                )
+        else:
+            print("Open Positions: none")
 
-        accountval=[v for v in link.ib.accountValues() if v.tag == 'NetLiquidationByCurrency' and v.currency == 'BASE']
-        print(f"Net Liquidation Value: {accountval}")
+        print(f"Next update in {STATUS_INTERVAL_SECONDS // 60} minutes.\n")
 
-        from ib_insync import Stock
-        contract = Stock('TSLA', 'SMART', 'USD')
-        temp=link.ib.reqContractDetails(contract)
-        print(f"Contract Details: {temp}")
+    async def run(self):
+        print(f"Starting {self.experiment_name}.")
+        await self.link.connect()
 
-        link.ib.disconnect()
-
-
+        try:
+            while True:
+                snapshot = await self.link.get_account_snapshot()
+                self._print_status(snapshot)
+                await asyncio.sleep(STATUS_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            await self.link.disconnect()
 
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser(description='IBbot Main Script')
-    # parser.add_argument("--experiment", type=str, help="Name of the experiment to run")
-    # args= parser.parse_args()
+    executor = Executor(settings, experiment_name="Production IB Monitor")
 
-
-    executor= Executor(settings)
-    executor.run()
+    try:
+        asyncio.run(executor.run())
+    except KeyboardInterrupt:
+        print("IB account monitor stopped by user.")
